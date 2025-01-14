@@ -165,3 +165,147 @@ fwrite(overall_blast, paste("invitro_sequences_blast_word_count", z, sep = ""))
 
 # in few cases sstart is bigger than send, which means it also reverses the sequence
 #for more refer NCBI global alignment vs local alignment.docx 
+
+
+
+###Task is to try global alignment instead of local alignment 
+##all the fasta files, make db files that were generated in local alignment case are now deleted. 
+
+
+#biostrings have pairwise alignment function that perform global alignment:
+
+seq1<-"GTGTGAGGATGTGGGGAG"
+
+seq2<- "GGGGAAGTGTGGAGTTGA" #(R7-2-11-20-21-5)
+
+sigma<- pwalign::nucleotideSubstitutionMatrix(match = 2, mismatch = -3, baseOnly = TRUE)
+#refer https://rpubs.com/Abhatt/835781
+
+#this sigma have match and unmatch scores as per NCBI blast global alignment default parameters.
+
+#match/mismatch is 2, -3
+#existence is 5 (which is gap opening)
+#gap extension is extension is 2)
+
+
+alignment1v4<- pwalign::pairwiseAlignment(seq1, seq2,substitutionMatrix = sigma,type="global", gapOpening = -5, gapExtension = -2, degap = TRUE)
+#Global PairwiseAlignmentsSingleSubject (1 of 1)
+#pattern: GTG-TGAGGATGTGGGGAG
+#subject: GCGGTGAGAGGTTGGGGA-
+#  score: -5 
+
+attempt1<- data.frame((matrix(nrow = 0, ncol=13)))
+colnames(attempt1)<- c("query", "subject", "similarity_perc", "NW_score_NCBI", "aligned_length", "match",
+                       "identity_perc_NCBI","mismatch", "gapOpening","gapExtension","gaps_perc",
+                       "aligned_query","aligned_subject")
+
+
+for (i in 1:nrow(reshaped_invitro)){
+  # Define query sequence and identifier
+  query_id<- reshaped_invitro$filename[i]
+  query_seq <- reshaped_invitro$invitro_sequences[i]
+  
+  #Loop through the rows for subject sequences
+  
+  for (j in 1:nrow(reshaped_invitro)){
+    #if (i !=j){ #would make sense if i dont want compare identical query and subject
+    # Define subject sequence and identifier
+    subject_id <- reshaped_invitro$filename[j]
+    subject_seq <- reshaped_invitro$invitro_sequences[j]
+    
+    alignment<- pwalign::pairwiseAlignment(query_seq, subject_seq,substitutionMatrix = sigma,type="global", gapOpening = -5, gapExtension = -2)
+    query<-  query_id
+    subject<-  subject_id
+    similarity_perc<- round(pwalign::pid(alignment),2) #similarity percent
+    NW_score_NCBI<- pwalign::score(alignment) #NW score
+    aligned_length<- width(pwalign::alignedPattern(alignment)) #The 2 objects returned by alignedPattern(x) and alignedSubject(x) are guaranteed to have the same shape (i.e. same length() and width())
+    match<- pwalign::nmatch(alignment)
+    identity_perc_NCBI<- round((match/aligned_length)*100, 2)#as per ncbi
+    mismatch<- pwalign::nmismatch(alignment)
+    gapOpening<- alignment@gapOpening
+    gapExtension<- alignment@gapExtension
+    gaps_perc<- round((gapExtension/aligned_length)*100, 2)
+    aligned_query<-as.character(pwalign::alignedPattern(alignment)) #aligned query
+    aligned_subject<- as.character(pwalign::alignedSubject(alignment)) #aligned subject
+    
+    
+    
+    final<- data.frame(query, subject, similarity_perc, NW_score_NCBI, aligned_length, match,
+                       identity_perc_NCBI,mismatch, gapOpening,gapExtension,gaps_perc,
+                       aligned_query,aligned_subject)
+    
+    attempt1 <- rbind(attempt1, final)
+  }
+  
+}
+
+fwrite(attempt1, "invitro_sequences_global_blast.csv")
+
+
+globalblast_4c<- attempt1 %>% select(query, subject, identity_perc_NCBI) #4c - 4 columns
+globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject, sep = "&")
+
+identifier_list <- list(reshaped_invitro$filename) #if list is removed it will save as values with 516 strings.
+#it is a list of list
+
+similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=516)) #additional column is for identifier column. This column will contain query name. 
+colnames(similarity_matrix)<- t(reshaped_invitro[,4]) #4 is filename
+
+test<- data.frame(matrix(NA, nrow = 0, ncol = 1))
+colnames(test)<- "invitro_sequences"
+
+similarity_matrix <- cbind(test, similarity_matrix) #colnames now increased to 517.
+
+
+for (i in 1: length (identifier_list[[1]])){
+  listofvalues<- list()
+  listofvalues <- append(listofvalues, identifier_list[[1]][i])
+  for (j in 1: length(identifier_list[[1]])){
+    k <- paste(identifier_list[[1]][i], identifier_list[[1]][j], sep="&") 
+    match<- globalblast_4c[globalblast_4c$identifier== k,] #match is a dataframe that only contain one row which provided condition
+    listofvalues <- append(listofvalues, match[1,3])
+    #if (nrow(match)<1){ #code debug
+    #print(k)
+    #print(match)}#append function works by adding things row wise 
+    #listofvalues [[i]][i]<- match[1,3] # this didnt work but good to know how to add data points to first entry of list
+  }
+  
+  my_row <- do.call(rbind, listofvalues) # do.call is used to execute a function with a list of arguments.
+  similarity_matrix[nrow(similarity_matrix)+1,] <- my_row #rbind will not work because my myrow gives as a column 
+  
+} 
+
+
+fwrite(similarity_matrix,
+       "invitro_sequences_similarity_matrix.csv")
+# if you plan to read the similarity table again then read as data as data frame 
+
+
+similarity_matrix<- fread("invitro_sequences_similarity_matrix.csv", header= TRUE, sep = ",")
+similarity_matrix <- as.data.frame(similarity_matrix)
+similarity_matrix_new<- similarity_matrix[,-c(1)]
+row.names(similarity_matrix_new)<- t(colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
+
+similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:43, as.numeric))
+
+#rownames does appear in excel as well in R. Deleted all files.
+#fwrite(similarity_matrix_new,
+#file= "/Users/jyotiadala/Library/CloudStorage/OneDrive-SUNYUpstateMedicalUniversity/project/Lieber_RLFS_Validation/Class_switch_recombination/Cluster_analysis/graph/input/template_RLFS_CSR_no_pseudogene_similarity_matrix_heatmap.csv", sep = ",")
+
+##no point in saving as row names are deleted by default leaving no identifier
+##whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
+pheatmap(similarity_matrix_new, 
+         main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7) ", 
+         treeheight_row = 100,treeheight_col=100, display_numbers = F, number_color= "white", fontsize_number = 6, border_color = "grey60")
+
+invitro_sequence_heatmap<- pheatmap(similarity_matrix_new, 
+                                    main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7) ", 
+                                    treeheight_row = 100,treeheight_col=100, display_numbers = F, number_color= "white", fontsize_number = 6, border_color = "grey60")
+
+
+ggsave( "invitro_sequences(R7)_heatmap.png", 
+        plot = invitro_sequence_heatmap, height= 30, width = 30, dpi = 300)
+
+
+
+

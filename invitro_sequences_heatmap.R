@@ -292,8 +292,8 @@ similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:43, as.numeric
 #fwrite(similarity_matrix_new,
 #file= "/Users/jyotiadala/Library/CloudStorage/OneDrive-SUNYUpstateMedicalUniversity/project/Lieber_RLFS_Validation/Class_switch_recombination/Cluster_analysis/graph/input/template_RLFS_CSR_no_pseudogene_similarity_matrix_heatmap.csv", sep = ",")
 
-##no point in saving as row names are deleted by default leaving no identifier
-##whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
+#no point in saving as row names are deleted by default leaving no identifier
+#whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
 pheatmap(similarity_matrix_new, 
          main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7) ", 
          treeheight_row = 100,treeheight_col=100, display_numbers = F, number_color= "white", fontsize_number = 6, border_color = "grey60")
@@ -308,4 +308,162 @@ ggsave( "invitro_sequences(R7)_heatmap.png",
 
 
 
+#The results are not accurate here because the scores are calculated by considering gaps.
+#Gaps are introduced, extended, and then aligned, which increases the alignment length and impacts the false similarity score.
+#Since these sequences are pre-aligned, we do not want to introduce any gaps. One way to address this is by increasing the gap-opening and gap-extension penalties to very high values.
+#The high cost of introducing a new gap ensures that gaps are avoided in the alignment
 
+
+attempt2<- data.frame((matrix(nrow = 0, ncol=10)))
+colnames(attempt2)<- c("query", "subject", "similarity_perc", "NW_score_NCBI", "aligned_length", "match",
+                       "identity_perc_NCBI","mismatch",
+                       "aligned_query","aligned_subject")
+
+for (i in 1:nrow(reshaped_invitro)){
+  # Define query sequence and identifier
+  query_id<- reshaped_invitro$filename[i]
+  query_seq <- reshaped_invitro$invitro_sequences[i]
+  
+  #Loop through the rows for subject sequences
+  
+  for (j in 1:nrow(reshaped_invitro)){
+    #if (i !=j){ #would make sense if i dont want compare identical query and subject
+    # Define subject sequence and identifier
+    subject_id <- reshaped_invitro$filename[j]
+    subject_seq <- reshaped_invitro$invitro_sequences[j]
+    
+    alignment<- pwalign::pairwiseAlignment(query_seq, subject_seq,substitutionMatrix = sigma,type="global", gapOpening = 1000, gapExtension = 1000)
+    
+    query<-  query_id
+    subject<-  subject_id
+    similarity_perc<- round(pwalign::pid(alignment),2) #similarity percent
+    NW_score_NCBI<- pwalign::score(alignment) #NW score
+    aligned_length<- width(pwalign::alignedPattern(alignment)) #The 2 objects returned by alignedPattern(x) and alignedSubject(x) are guaranteed to have the same shape (i.e. same length() and width())
+    match<- pwalign::nmatch(alignment)
+    identity_perc_NCBI<- round((match/aligned_length)*100, 2)#as per ncbi
+    mismatch<- pwalign::nmismatch(alignment)
+    aligned_query<-as.character(pwalign::alignedPattern(alignment)) #aligned query
+    aligned_subject<- as.character(pwalign::alignedSubject(alignment)) #aligned subject
+    
+    
+    
+    final<- data.frame(query, subject, similarity_perc, NW_score_NCBI, aligned_length, match,
+                       identity_perc_NCBI,mismatch,
+                       aligned_query,aligned_subject)
+    
+    attempt2 <- rbind(attempt2, final)
+  }
+  
+}
+
+
+
+
+fwrite(attempt2, "invitro_sequences_global_blast_withoutgaps.csv")
+
+
+##to make similarity heatmap: ##task 1: rotate the overall_blast in matrix form, where we have 516 col and 516 rows showing 266256 combinations
+
+globalblast_4c<- attempt2 %>% select(query, subject, identity_perc_NCBI) #4c - 4 columns
+globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject, sep = "&")
+
+identifier_list <- list(reshaped_invitro$filename) #if list is removed it will save as values with 516 strings.
+#it is a list of list
+
+similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=516)) #additional column is for identifier column. This column will  contain query name. 
+colnames(similarity_matrix)<- t(reshaped_invitro[,4]) #4 is filename
+
+test<- data.frame(matrix(NA, nrow = 0, ncol = 1))
+colnames(test)<- "invitro_sequences"
+
+similarity_matrix <- cbind(test, similarity_matrix) #colnames now increased to 517.
+
+
+for (i in 1: length (identifier_list[[1]])){
+  listofvalues<- list()
+  listofvalues <- append(listofvalues, identifier_list[[1]][i])
+  for (j in 1: length(identifier_list[[1]])){
+    k <- paste(identifier_list[[1]][i], identifier_list[[1]][j], sep="&") 
+    match<- globalblast_4c[globalblast_4c$identifier== k,] #match is a dataframe that only contain one row which provided condition
+    listofvalues <- append(listofvalues, match[1,3])
+    #if (nrow(match)<1){ #code debug
+    #print(k)
+    #print(match)}#append function works by adding things row wise 
+    #listofvalues [[i]][i]<- match[1,3] # this didnt work but good to know how to add data points to first entry of list
+  }
+  
+  my_row <- do.call(rbind, listofvalues) # do.call is used to execute a function with a list of arguments.
+  similarity_matrix[nrow(similarity_matrix)+1,] <- my_row #rbind will not work becuase my myrow gives as column 
+  
+} 
+
+
+fwrite(similarity_matrix,
+       "invitro_sequences_similarity_matrix_without_gaps.csv")
+# if you plan to read the similarity table again then read as data as data frame 
+
+
+similarity_matrix<- fread("invitro_sequences_similarity_matrix_without_gaps.csv", header= TRUE, sep = ",")
+similarity_matrix <- as.data.frame(similarity_matrix)
+similarity_matrix_new<- similarity_matrix[,-c(1)]
+row.names(similarity_matrix_new)<- t(colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
+
+similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:43, as.numeric))
+
+#rownames does appear in excel as well in R. Deleted all files.
+fwrite(similarity_matrix_new,
+       "invitro_sequences_without_gaps_similarity_matrix_heatmap_input.csv", sep = ",")
+
+# Convert similarity matrix to distance matrix
+# A similarity of 100% (perfect match) gives a distance of 0
+# A similarity of 0% (no match) gives a distance of 1
+distance_matrix <- 1 - (similarity_matrix_new / 100)
+
+# Convert distance matrix to dist object
+dist_object <- as.dist(distance_matrix)
+
+#Perform hierarchical clustering
+row_clustering <- hclust(dist_object, method = "average")  # Choose method: average, complete, single, etc
+
+
+#For two clusters R and S, the single linkage returns the minimum distance between two points i and j such that i belongs to R and j belongs to S.
+#For two clusters R and S, the complete linkage returns the maximum distance between two points i and j such that i belongs to R and j belongs to S.
+#For two clusters R and S, first for the distance between any data-point i in R and any data-point j in S and then the arithmetic mean of these distances are calculated.
+#Average Linkage returns this value of the arithmetic mean.
+
+
+invitro_sequence_heatmap_without_gaps<- pheatmap(
+  similarity_matrix_new,                  # Original similarity matrix
+  cluster_rows = row_clustering,     # Use custom clustering for rows
+  cluster_cols = row_clustering,     # (Optional) Same clustering for columns
+  scale = "none",                    # Don't scale data
+  main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7)"
+)
+
+
+##no point in saving as row names are deleted by default leaving no identifier
+##whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
+
+ggsave( "invitro_sequences(R7)_without_gaps_heatmap.png", 
+        plot = invitro_sequence_heatmap_without_gaps, height= 30, width = 30, dpi = 300)
+
+clusters <- cutree(row_clustering, k = 5)
+table(clusters)
+
+#clusters
+#1   2   3   4   5 
+#387  48   6  74   1 
+
+annotation <- data.frame(Cluster = factor(clusters))
+rownames(annotation) <- rownames(similarity_matrix_new)
+# Add annotation to the heatmap
+invitro_sequence_heatmap_without_gaps_with_clusters<- pheatmap(
+  similarity_matrix_new,
+  cluster_rows = row_clustering,
+  cluster_cols = row_clustering,
+  annotation_row = annotation,
+  main = "invitro_sequence_heatmap_without_gaps_with_clusters"
+)
+
+ggsave("invitro_sequence_heatmap_without_gaps_with_clusters.png", 
+       plot= invitro_sequence_heatmap_without_gaps_with_clusters, height = 30, width = 30, dpi=300)

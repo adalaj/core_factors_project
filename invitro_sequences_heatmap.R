@@ -1,3 +1,6 @@
+
+#!/usr/bin/env Rscript
+
 setwd("/Users/jyotiadala/Library/CloudStorage/OneDrive-SUNYUpstateMedicalUniversity/project/bruce_lab/project/Nathan")
 
 library(tidyverse)
@@ -286,7 +289,7 @@ similarity_matrix <- as.data.frame(similarity_matrix)
 similarity_matrix_new<- similarity_matrix[,-c(1)]
 row.names(similarity_matrix_new)<- t(colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
 
-similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:43, as.numeric))
+similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:516, as.numeric))
 
 #rownames does appear in excel as well in R. Deleted all files.
 #fwrite(similarity_matrix_new,
@@ -408,16 +411,29 @@ similarity_matrix <- as.data.frame(similarity_matrix)
 similarity_matrix_new<- similarity_matrix[,-c(1)]
 row.names(similarity_matrix_new)<- t(colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
 
-similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:43, as.numeric))
+similarity_matrix_new<- similarity_matrix_new %>% mutate(across(1:516, as.numeric))
+#whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
 
 #rownames does appear in excel as well in R. Deleted all files.
 fwrite(similarity_matrix_new,
        "invitro_sequences_without_gaps_similarity_matrix_heatmap_input.csv", sep = ",")
 
+
+
+
+#pheatmap(similarity_matrix_new, cluster_rows = TRUE, cluster_cols = FALSE)
+# here the clustering of column is happening randomly. not sure of order. Also didnt see diagonal line
+
+
+
+
+
 # Convert similarity matrix to distance matrix
 # A similarity of 100% (perfect match) gives a distance of 0
 # A similarity of 0% (no match) gives a distance of 1
 distance_matrix <- 1 - (similarity_matrix_new / 100)
+fwrite(distance_matrix, "invitro_sequences_without_gaps_similarity_matrix_heatmap_distance_input.csv")
+
 
 # Convert distance matrix to dist object
 dist_object <- as.dist(distance_matrix)
@@ -440,12 +456,22 @@ invitro_sequence_heatmap_without_gaps<- pheatmap(
   main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7)"
 )
 
+invitro_sequence_heatmap_without_gaps_using_distance<- pheatmap(
+   distance_matrix,   #it will be same but colors will be changed because similar sequence have short distance, least as 0               
+   cluster_rows = row_clustering,     
+   cluster_cols = row_clustering,     
+   scale = "none",                    
+  main = "Comparative Analysis of Sequence Similarity distance in Invitro_sequences (R7)")
 
-##no point in saving as row names are deleted by default leaving no identifier
-##whenever you want to plot heatmap perform the above steps, as in read similarity matrix, remove first column, transform column name and make them numeric
+
 
 ggsave( "invitro_sequences(R7)_without_gaps_heatmap.png", 
         plot = invitro_sequence_heatmap_without_gaps, height= 30, width = 30, dpi = 300)
+
+ggsave( "invitro_sequences(R7)_without_gaps_heatmap_distance.png", 
+        plot = invitro_sequence_heatmap_without_gaps_using_distance, height= 30, width = 30, dpi = 300)
+
+#no point in saving as row names are deleted by default leaving no identifier
 
 clusters <- cutree(row_clustering, k = 5)
 table(clusters)
@@ -467,3 +493,66 @@ invitro_sequence_heatmap_without_gaps_with_clusters<- pheatmap(
 
 ggsave("invitro_sequence_heatmap_without_gaps_with_clusters.png", 
        plot= invitro_sequence_heatmap_without_gaps_with_clusters, height = 30, width = 30, dpi=300)
+
+cluster_assignments_4<- cluster_assignments %>% filter(Cluster ==4)
+
+#This heatmap suggests that there is a large red cluster at the top of the figure, while the rest is filled with yellow and blue colors, 
+#supporting the hypothesis that core factor binding is sequence-independent.
+#The question is: what makes these red sequences different from the others? Could it be that they are more GC-rich?
+
+
+
+#invitro_sequence_heatmap_without_gaps is a list of four lists, each containing seven values. 
+#It has an 'order' list that contains the row order under tree_row. 
+#The row order is a numeric value that provides the original row number in a serial fashion. 
+#For example, if the first row number is 50, it means the identifier used in row 50 of the original similarity matrix is now the first row and column of the heatmap (output graph) 
+#There is another list called 'labels' in the same tree_row, which provides the names of the rows in the original similarity matrix."
+
+
+
+#clustered_row_order<- as.data.frame(invitro_sequence_heatmap_without_gaps$tree_row$order)
+#this only provide numeric value therefore not that helpful
+
+
+sorted_data<- similarity_matrix[invitro_sequence_heatmap_without_gaps$tree_row$order,] # This reorders the rows of similarity_matrix according to the clustering order
+
+#The first column will provide the sequence identifier name based on first column of sorted data 
+heatmap_order<- sorted_data %>% select("invitro_sequences") #captures first row
+
+sorted_data4 <-similarity_matrix[invitro_sequence_heatmap_without_gaps$tree_row$order, #This reorders the rows of similarity_matrix according to the clustering order
+                                 sorted_data$invitro_sequences]#reorder the columns based on invitro_sequences
+
+heatmap_order <- cbind(heatmap_order, sorted_data4)
+heatmap_order$original_row_order <- row.names(heatmap_order) #get original row number based on similarity_matrix
+#designated to column 518
+
+heatmap_order$serial_row_number <- 1:516 #new row number according to heatmap
+#designated to column 519
+
+heatmap_order2 <- heatmap_order %>% select(original_row_order, serial_row_number, invitro_sequences, 2:517)
+
+
+fwrite(heatmap_order2, "invitro_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv")
+
+which(colnames(heatmap_order2)=="R7-1-18-20-27-5") # "R7-1-18-20-27-5" this is the column that has value of 44.44 next to 94.44
+#70
+#row: 67 identifier: R7-1-18-20-27-5
+
+heatmap_order2_high_clustered<- heatmap_order2[c(1:67),c(1:70)]
+fwrite(heatmap_order2_high_clustered, "invitro_sequences_without_gaps_similarity_matrix_heatmap_order_high_similarity_score_cluster.csv")
+
+
+
+
+hc_similarity_matrix <- as.data.frame(heatmap_order2_high_clustered) #hc means high_clustered
+hc_similarity_matrix_new<- hc_similarity_matrix[,-c(1,2,3)]
+hc_row.names(hc_similarity_matrix_new)<- t(hc_colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
+
+hc_similarity_matrix_new<- hc_similarity_matrix_new %>% mutate(across(1:67, as.numeric))
+
+
+invitro_sequence_heatmap_without_gaps_high_similarity_cluster<- pheatmap(hc_similarity_matrix_new, cluster_rows = FALSE, cluster_cols = FALSE, SCALE= "none")
+
+ggsave("invitro_sequence_heatmap_without_gaps_high_similarity_cluster.png", 
+       plot= invitro_sequence_heatmap_without_gaps_high_similarity_cluster, height = 30, width = 30, dpi=300)
+

@@ -29,7 +29,8 @@ reshaped_invivo$length<- nchar(reshaped_invivo$invivo_sequences)
 reshaped_invivo$filename<- gsub(">", "", reshaped_invivo$invivo_identifier)
 
 reshaped_invivo<- reshaped_invivo %>% mutate(filename = paste("seq_", filename, sep = ""))
-
+anyDuplicated(reshaped_invivo$filename)
+#0
 
 fwrite(reshaped_invivo, "reshaped_S6_invivo.csv")
 #90 sequences
@@ -81,6 +82,7 @@ for (i in 1:nrow(reshaped_invivo)){
 fwrite(attempt2, "invivo_sequences_global_blast_withoutgaps.csv")
 #8100
 
+##to make similarity heatmap: ##task 1: rotate the global_blast in matrix form, where we have 516 col and 516 rows showing 266256 combinations
 globalblast_4c<- attempt2 %>% select(query, subject, identity_perc_NCBI) #4c - 4 columns
 globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject, sep = "&")
 
@@ -169,7 +171,7 @@ invivo_sequence_heatmap_without_gaps<- pheatmap(
   cluster_rows = row_clustering,     # Use custom clustering for rows
   cluster_cols = row_clustering,     # (Optional) Same clustering for columns
   scale = "none",                    # Don't scale data
-  main = "Comparative Analysis of Sequence Similarity in invivo_sequences"
+  main = "Comparative Analysis of Sequence Percent Identity in Invivo_sequences"
 )
 
 invivo_sequence_heatmap_without_gaps_using_distance<- pheatmap(
@@ -181,8 +183,8 @@ invivo_sequence_heatmap_without_gaps_using_distance<- pheatmap(
 
 
 
-ggsave( "invivo_sequences_without_gaps_heatmap.png", 
-        plot = invivo_sequence_heatmap_without_gaps, height= 30, width = 30, dpi = 300)
+ggsave( "invivo_sequences_without_gaps_heatmap.tiff", 
+        plot = invivo_sequence_heatmap_without_gaps, height= 11, width = 15, dpi = 600)
 
 ggsave( "invivo_sequences_without_gaps_heatmap_distance.png", 
         plot = invivo_sequence_heatmap_without_gaps_using_distance, height= 30, width = 30, dpi = 300)
@@ -206,12 +208,78 @@ heatmap_order2_invivo <- heatmap_order %>% select(original_row_order, serial_row
 fwrite(heatmap_order2_invivo, "invivo_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv")
 
 
+##attempted to make similarity score histogram 
+heatmap_order2<- fread("invivo_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv", header = TRUE, sep = ",")
+heatmap_order2<- as.data.frame(heatmap_order2)
+heatmap_order2_matrix<- heatmap_order2[,-c(1,2,3)]
+heatmap_order2_matrix_scores <- heatmap_order2_matrix[lower.tri(heatmap_order2_matrix, diag = FALSE)] 
+#4005
 
-fwrite(heatmap_order2, "invivo_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv")
+#the number of lower triangular part of a square matrix, excluding teh diagonal is calculated by uisng: n(n-1)/2 where n is matrix dimension which is 90.
+#lower.tri: The elements below the diagonal are TRUE, and the rest (diagonal and above) are FALSE.
+#Using this logical matrix, we extract only the lower triangular elements of the similarity matrix, excluding the diagonal.
+# Since similarity matrices are symmetric, the upper and lower triangular parts are identical. We only need one of them to avoid redundancy.
 
-which(colnames(heatmap_order2)=="R7-1-18-20-27-5") # "R7-1-18-20-27-5" this is the column that has value of 44.44 next to 94.44
-#70
-#row: 67 identifier: R7-1-18-20-27-5
 
-heatmap_order2_high_clustered<- heatmap_order2[c(1:67),c(1:70)]
-fwrite(heatmap_order2_high_clustered, "invivo_sequences_without_gaps_similarity_matrix_heatmap_order_high_similarity_score_cluster.csv")
+
+scores_data<- as.data.frame(heatmap_order2_matrix_scores)
+colnames(scores_data)<- c("identity_perc_score")
+
+fwrite(scores_data, "invivo_sequences_without_gaps_similarity_matrix_histogram_input.csv")
+
+table(scores_data)
+#identity_perc_score
+#0  5.56 11.11 16.67 22.22 27.78 33.33 38.89 44.44    50 55.56 61.11 66.67 83.33 94.44   100 
+#6    50   231   441   691   804   751   514   268   149    57    13     2     1     3    24
+
+heatmap_order2_matrix_scores_histogram<-scores_data %>% group_by(scores_data$identity_perc_score) %>% dplyr::count()
+colnames(heatmap_order2_matrix_scores_histogram)<- c("invivo_identity_perc_score", "frequency")
+fwrite(heatmap_order2_matrix_scores_histogram, "invivo_sequences_without_gaps_similarity_matrix_histogram_frequency_table.csv")
+
+
+
+#if you want to see more like, midpoints and breaks then 
+#check<- hist(heatmap_order2_matrix_scores), you can navigate other information
+
+#A histogram is plotted, showing how frequently different similarity scores occur.
+
+
+avg_score <- round(mean(heatmap_order2_matrix_scores),2)
+#[1] 29.74
+#abline: Draws a vertical line at the mean of the similarity scores to highlight the central tendency
+#lwd is thickness
+#lty is dashed for better visualization
+
+
+invivo_histo<- ggplot(scores_data, aes(x = heatmap_order2_matrix_scores)) +
+  geom_histogram(
+    binwidth = 5, 
+    fill = "skyblue",
+    color = "darkblue", 
+    boundary = 0 
+  ) +
+  geom_vline(aes(xintercept = mean(heatmap_order2_matrix_scores)), color = "red", linewidth = 2, linetype = "dashed")+
+  labs (
+    title = "Invivo sequences Percent Identity Score", 
+    subtitle = paste("Average percent score: ", avg_score, sep= ""),
+    x = "Percent Identity Score",
+    y = "Frequency")+
+  
+  scale_x_continuous(
+    limits = c(0,100),
+    breaks = seq(0, 100, 10)
+  )+
+  scale_y_continuous(
+    limits = c(0,820),
+    breaks = seq(0, 820, 150)
+  )+
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        text = element_text(size = 30),
+        axis.line = element_line(color = "black"),
+        legend.position = "top")
+
+ggsave("invivo_sequences_percent_identity_score_histogram.tiff", 
+       plot= invivo_histo, height = 11, width = 12, dpi=600)
+
+

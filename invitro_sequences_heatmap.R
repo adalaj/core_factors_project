@@ -7,13 +7,15 @@ library(tidyverse)
 library(data.table)
 library(rBLAST)
 library(Biostrings)
+library(pheatmap)
+
 
 
 
 # To see if ncbi blastn is there or not : Sys.which("blastn")
 # This is the word document provided by bruce: CF Selex Supplementary Tables.docx
 # I separated each tables and saved them in separate csv files based on their table title
-# Task 1: To compare similarity within inviro sequences 
+# Task 1: To compare similarity within invitro sequences 
 
 invitro<- fread("S3_R7_invitro.csv", sep = ",", header = TRUE)
 
@@ -36,11 +38,24 @@ reshaped_invitro$filename<- gsub(">", "", reshaped_invitro$invitro_identifier)
 reshaped_invitro$filename<- gsub("[\\|/\\(\\)]", "-", reshaped_invitro$filename)
 
 reshaped_invitro$filename<- sub("-$", "", reshaped_invitro$filename)
+anyDuplicated(reshaped_invitro$filename)
+#33
 
+duplicated_entries <- reshaped_invitro$filename[duplicated(reshaped_invitro$filename)]
+duplicated_entries
+#[1] "R7-1-13-20-1-5"  "R7-1-13-20-5-1"  "R7-1-13-20-5-1"  "R7-2-11-20-13-1" "R7-2-11-20-13-1" "R7-2-11-20-13-1" "R7-2-11-20-13-1"
+#[8] "R7-2-11-20-13-1" "R7-2-11-20-30-1" "R7-2-11-20-30-1" "R7-2-11-20-30-1" "R7-2-11-20-30-1" "R7-2-11-20-30-1"
+
+unique_duplicated_entries <- unique(duplicated_entries)
+
+reshaped_invitro <- reshaped_invitro %>% mutate(filename= paste(filename, "_", row_number(), sep = "")) #assign row numbers to each filename
+
+anyDuplicated(reshaped_invitro$filename)
+#0
+  
+  
 fwrite(reshaped_invitro, "reshaped_S3_R7_invitro.csv")
 
-
-#test<- head(reshaped_invitro, 10)
 
 # Define the temporary directory for FASTA files
 temp_dir <- "/Users/jyotiadala/Library/CloudStorage/OneDrive-SUNYUpstateMedicalUniversity/project/bruce_lab/project/Nathan"
@@ -251,7 +266,7 @@ globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject,
 identifier_list <- list(reshaped_invitro$filename) #if list is removed it will save as values with 516 strings.
 #it is a list of list
 
-similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=516)) #additional column is for identifier column. This column will contain query name. 
+similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=517)) #additional column is for identifier column. This column will contain query name. 
 colnames(similarity_matrix)<- t(reshaped_invitro[,4]) #4 is filename
 
 test<- data.frame(matrix(NA, nrow = 0, ncol = 1))
@@ -365,7 +380,7 @@ for (i in 1:nrow(reshaped_invitro)){
 fwrite(attempt2, "invitro_sequences_global_blast_withoutgaps.csv")
 
 
-##to make similarity heatmap: ##task 1: rotate the overall_blast in matrix form, where we have 516 col and 516 rows showing 266256 combinations
+##to make similarity heatmap: ##task 1: rotate the global_blast in matrix form, where we have 516 col and 516 rows showing 266256 combinations
 
 globalblast_4c<- attempt2 %>% select(query, subject, identity_perc_NCBI) #4c - 4 columns
 globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject, sep = "&")
@@ -373,10 +388,10 @@ globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject,
 identifier_list <- list(reshaped_invitro$filename) #if list is removed it will save as values with 516 strings.
 #it is a list of list
 
-similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=516)) #additional column is for identifier column. This column will  contain query name. 
+similarity_matrix <- data.frame(matrix(NA, nrow=0, ncol=516))  
 colnames(similarity_matrix)<- t(reshaped_invitro[,4]) #4 is filename
 
-test<- data.frame(matrix(NA, nrow = 0, ncol = 1))
+test<- data.frame(matrix(NA, nrow = 0, ncol = 1)) #additional column is for identifier column. This column will  contain query name.
 colnames(test)<- "invitro_sequences"
 
 similarity_matrix <- cbind(test, similarity_matrix) #colnames now increased to 517.
@@ -453,7 +468,7 @@ invitro_sequence_heatmap_without_gaps<- pheatmap(
   cluster_rows = row_clustering,     # Use custom clustering for rows
   cluster_cols = row_clustering,     # (Optional) Same clustering for columns
   scale = "none",                    # Don't scale data
-  main = "Comparative Analysis of Sequence Similarity in Invitro_sequences (R7)"
+  main = "Comparative Analysis of Sequence Percent Identity in Invitro sequences (R7)"
 )
 
 invitro_sequence_heatmap_without_gaps_using_distance<- pheatmap(
@@ -465,23 +480,28 @@ invitro_sequence_heatmap_without_gaps_using_distance<- pheatmap(
 
 
 
-ggsave( "invitro_sequences(R7)_without_gaps_heatmap.png", 
-        plot = invitro_sequence_heatmap_without_gaps, height= 30, width = 30, dpi = 300)
+ggsave( "invitro_sequences(R7)_without_gaps_heatmap.tiff", 
+        plot = invitro_sequence_heatmap_without_gaps, height= 11, width = 15, dpi = 600)
 
 ggsave( "invitro_sequences(R7)_without_gaps_heatmap_distance.png", 
         plot = invitro_sequence_heatmap_without_gaps_using_distance, height= 30, width = 30, dpi = 300)
 
 #no point in saving as row names are deleted by default leaving no identifier
 
+
+#just wanted to see sequences that are 100 percent identical to each other
 clusters <- cutree(row_clustering, k = 5)
 table(clusters)
 
 #clusters
 #1   2   3   4   5 
-#387  48   6  74   1 
+#382  54  69   4   7  
+
 
 annotation <- data.frame(Cluster = factor(clusters))
-rownames(annotation) <- rownames(similarity_matrix_new)
+
+
+#rownames(annotation) <- rownames(similarity_matrix_new)
 # Add annotation to the heatmap
 invitro_sequence_heatmap_without_gaps_with_clusters<- pheatmap(
   similarity_matrix_new,
@@ -492,15 +512,31 @@ invitro_sequence_heatmap_without_gaps_with_clusters<- pheatmap(
 )
 
 ggsave("invitro_sequence_heatmap_without_gaps_with_clusters.png", 
-       plot= invitro_sequence_heatmap_without_gaps_with_clusters, height = 30, width = 30, dpi=300)
+       plot= invitro_sequence_heatmap_without_gaps_with_clusters, height = 11, width = 15, dpi=600)
 
-cluster_assignments_4<- cluster_assignments %>% filter(Cluster ==4)
+
+
+
 
 #This heatmap suggests that there is a large red cluster at the top of the figure, while the rest is filled with yellow and blue colors, 
 #supporting the hypothesis that core factor binding is sequence-independent.
 #The question is: what makes these red sequences different from the others? Could it be that they are more GC-rich?
 
+cluster_assignment<- annotation
+cluster_assignment$sequence<- row.names(cluster_assignment)
 
+for (i in 1:length(unique(cluster_assignment$Cluster))){
+  cluster <- cluster_assignment %>% filter(Cluster == i)
+  reshaped_invitro_cluster <- reshaped_invitro[reshaped_invitro$filename %in% cluster$sequence, ] 
+  filename <- paste("reshaped_invitro_cluster", i, sep = "")
+  fwrite(reshaped_invitro_cluster, paste(filename, ".csv", sep = ""))
+  fasta_content<- paste(reshaped_invitro_cluster$invitro_identifier, "\n", reshaped_invitro_cluster$invitro_sequences)
+  writeLines(fasta_content, paste(filename, ".fasta", sep = ""))
+}
+
+
+
+#to determine what is order of columns in output file, or the one in the image.
 
 #invitro_sequence_heatmap_without_gaps is a list of four lists, each containing seven values. 
 #It has an 'order' list that contains the row order under tree_row. 
@@ -534,9 +570,15 @@ heatmap_order2 <- heatmap_order %>% select(original_row_order, serial_row_number
 
 fwrite(heatmap_order2, "invitro_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv")
 
-which(colnames(heatmap_order2)=="R7-1-18-20-27-5") # "R7-1-18-20-27-5" this is the column that has value of 44.44 next to 94.44
+
+which(colnames(heatmap_order2)=="R7-2-6-20-34-2_354") # "R7-2-6-20-34-2_354" this is the column that has value of 22.22 next to 94.44,55.56,38.89
 #70
-#row: 67 identifier: R7-1-18-20-27-5
+
+colnames(heatmap_order2)[70]
+#[1] "R7-2-6-20-34-2_354"
+
+
+#row: 67 identifier: R7-2-6-20-34-2_354
 
 heatmap_order2_high_clustered<- heatmap_order2[c(1:67),c(1:70)]
 fwrite(heatmap_order2_high_clustered, "invitro_sequences_without_gaps_similarity_matrix_heatmap_order_high_similarity_score_cluster.csv")
@@ -546,7 +588,7 @@ fwrite(heatmap_order2_high_clustered, "invitro_sequences_without_gaps_similarity
 
 hc_similarity_matrix <- as.data.frame(heatmap_order2_high_clustered) #hc means high_clustered
 hc_similarity_matrix_new<- hc_similarity_matrix[,-c(1,2,3)]
-hc_row.names(hc_similarity_matrix_new)<- t(hc_colnames(similarity_matrix_new)) #if as.data.frame is done then only this code will work.
+row.names(hc_similarity_matrix_new)<- t(colnames(hc_similarity_matrix_new)) #if as.data.frame is done then only this code will work.
 
 hc_similarity_matrix_new<- hc_similarity_matrix_new %>% mutate(across(1:67, as.numeric))
 
@@ -555,4 +597,196 @@ invitro_sequence_heatmap_without_gaps_high_similarity_cluster<- pheatmap(hc_simi
 
 ggsave("invitro_sequence_heatmap_without_gaps_high_similarity_cluster.png", 
        plot= invitro_sequence_heatmap_without_gaps_high_similarity_cluster, height = 30, width = 30, dpi=300)
+
+
+
+
+
+
+##attempted to make similarity score histogram 
+heatmap_order2<- fread("invitro_sequences_without_gaps_similarity_matrix_heatmap_order_output.csv", header = TRUE, sep = ",")
+heatmap_order2<- as.data.frame(heatmap_order2)
+heatmap_order2_matrix<- heatmap_order2[,-c(1,2,3)]
+heatmap_order2_matrix_scores <- heatmap_order2_matrix[lower.tri(heatmap_order2_matrix, diag = FALSE)] 
+#132870
+
+#the number of lower triangular part of a square matrix, excluding teh diagonal is calculated by uisng: n(n-1)/2 where n is matrix dimension which is 516.
+#lower.tri: The elements below the diagonal are TRUE, and the rest (diagonal and above) are FALSE.
+#Using this logical matrix, we extract only the lower triangular elements of the similarity matrix, excluding the diagonal.
+# Since similarity matrices are symmetric, the upper and lower triangular parts are identical. We only need one of them to avoid redundancy.
+
+
+
+scores_data<- as.data.frame(heatmap_order2_matrix_scores)
+colnames(scores_data)<- c("identity_perc_score")
+
+fwrite(scores_data, "invitro_sequences_without_gaps_similarity_matrix_histogram_input.csv")
+
+table(scores_data)
+#0    5.56 11.11 16.67 22.22 27.78 33.33 38.89 44.44    50 55.56 61.11 66.67 
+#301  2101  6375 11694 15416 16759 16723 16342 14860  12439  8962  5256  2574 
+#.    72.22 77.78 83.33 88.89 94.44   100 
+#946   218    59    11   175  1659
+
+heatmap_order2_matrix_scores_histogram<-scores_data %>% group_by(scores_data$identity_perc_score) %>% dplyr::count()
+colnames(heatmap_order2_matrix_scores_histogram)<- c("invitro_identity_perc_score", "frequency")
+fwrite(heatmap_order2_matrix_scores_histogram, "invitro_sequences_without_gaps_similarity_matrix_histogram_frequency_table.csv")
+
+
+
+#if you want to see more like, midpoints and breaks then 
+#check<- hist(heatmap_order2_matrix_scores), you can navigate other information
+
+#A histogram is plotted, showing how frequently different similarity scores occur.
+
+  
+avg_score <- round(mean(heatmap_order2_matrix_scores),2)
+#[1] 36.3366
+#abline: Draws a vertical line at the mean of the similarity scores to highlight the central tendency
+#lwd is thickness
+#lty is dashed for better visualization
+
+#in excel, if you take entire matrix and do average =AVERAGE(D2:SY517) it gives = 36.45997484
+
+
+invitro_histo<- ggplot(scores_data, aes(x = heatmap_order2_matrix_scores)) +
+  geom_histogram(
+    binwidth = 5, 
+    fill = "skyblue",
+    color = "darkblue", 
+    boundary = 0 
+  ) +
+  geom_vline(aes(xintercept = mean(heatmap_order2_matrix_scores)), color = "red", linewidth = 2, linetype = "dashed")+
+  labs (
+    title = "Invitro sequences (R7) Percent Identity Score", 
+    subtitle = paste("Average percent score: ", avg_score, sep= ""),
+    x = "Percent Identity Score",
+    y = "Frequency")+
+  
+  scale_x_continuous(
+    limits = c(0,100),
+    breaks = seq(0, 100, 10)
+  )+
+  scale_y_continuous(
+    limits = c(0,16800),
+    breaks = seq(0, 16800, 2500)
+  )+
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        text = element_text(size = 30),
+        axis.line = element_line(color = "black"),
+        legend.position = "top")
+
+ggsave("invitro_sequences_percent_identity_score_histogram.tiff", 
+       plot= invitro_histo, height = 11, width = 12, dpi=600)
+
+
+
+
+##Next, i wanted to remove bar that has 100% similarity because these are potentially outliers.
+#maybe removing them would decrease mean close to ~30.
+
+
+#the lower triangular part of a square matrix, replacing all 100% similarity with NA.
+heatmap_order2_matrix_scores[heatmap_order2_matrix_scores == 100] <- NA
+#132870
+
+length(heatmap_order2_matrix_scores) #132870
+sum(heatmap_order2_matrix_scores, na.rm = TRUE) #4659231
+sum(is.na(heatmap_order2_matrix_scores)) #[1] 1659
+#132870-1659 = 131211
+
+#4659231/131211= 35.50945 ~35.51
+
+scores_data<- as.data.frame(heatmap_order2_matrix_scores)
+colnames(scores_data)<- c("identity_perc_score")
+
+avg_score <- round(mean(heatmap_order2_matrix_scores, na.rm = TRUE),2)
+#[1] 35.51
+
+test_heatmap_order2_matrix_scores_histogram<-scores_data %>% group_by(scores_data$identity_perc_score) %>% dplyr::count()
+colnames(heatmap_order2_matrix_scores_histogram)<- c("invitro_identity_perc_score", "frequency")
+
+table(scores_data)
+#0    5.56 11.11 16.67 22.22 27.78 33.33 38.89 44.44    50 55.56 61.11 66.67 
+#301  2101  6375 11694 15416 16759 16723 16342 14860  12439  8962  5256  2574 
+#.    72.22 77.78 83.33 88.89 94.44   
+#946   218    59    11   175          
+
+invitro_histo_toprepeat<- ggplot(scores_data, aes(x = heatmap_order2_matrix_scores)) +
+  geom_histogram(
+    binwidth = 5, 
+    fill = "skyblue",
+    color = "darkblue", 
+    boundary = 0 
+  ) +
+  geom_vline(aes(xintercept = mean(heatmap_order2_matrix_scores, na.rm = TRUE)), color = "red", linewidth = 2, linetype = "dashed")+
+  
+  labs (
+    title = "Invitro sequences (R7) Percent Identity Score", 
+    subtitle = paste("Average percent score: ", avg_score, sep= ""),
+    x = "Percent Identity Score",
+    y = "Frequency")+
+  
+  scale_x_continuous(
+    limits = c(0,100),
+    breaks = seq(0, 100, 10)
+  )+
+  scale_y_continuous(
+    limits = c(0,16800),
+    breaks = seq(0, 16800, 2500)
+  )+
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        text = element_text(size = 30),
+        axis.line = element_line(color = "black"),
+        legend.position = "top")
+
+
+ggsave("invitro_sequences_percent_identity_score_histogram_without_top_repeat.tiff", 
+       plot= invitro_histo_toprepeat, height = 11, width = 12, dpi=600)
+
+
+
+
+
+##wanted to see, if i can decrease mean byremoving sequences that are giving 100% similarity percent with each other
+attempt2<- fread("invitro_sequences_global_blast_withoutgaps.csv", sep = ",", header = TRUE)
+invitro_top_repeat<- attempt2 %>% filter(identity_perc_NCBI == 100 & query != subject)
+#nrow= 3318
+length(unique(invitro_top_repeat$query))
+#[1] 70
+
+length(unique(invitro_top_repeat$subject))
+#[1] 70
+
+query<- invitro_top_repeat %>% select(query)
+subject <- invitro_top_repeat %>% select(subject)
+colnames(subject)<- c("query")
+
+
+check<- setdiff(query, subject) #nrow = 0
+check2 <- setdiff(subject, query) #nrow = 0
+
+#this means the there are 70 sequences that are identical to each other.
+
+
+
+globalblast_4c<- attempt2 %>% select(query, subject, identity_perc_NCBI) #4c - 4 columns
+globalblast_4c$identifier <- paste(globalblast_4c$query, globalblast_4c$subject, sep = "&")
+invitro_top_repeat$identifier <- paste(invitro_top_repeat$query, invitro_top_repeat$subject, sep = "&")
+fwrite(invitro_top_repeat, "invitro_top_repeat_sequences.csv")
+
+globalblast_4c<- globalblast_4c %>% mutate(identity_perc_NCBI = case_when(
+                                          globalblast_4c$identifier %in% invitro_top_repeat$identifier ~ 0,
+                                          TRUE ~ identity_perc_NCBI))
+globalblast_4c$identity_perc_NCBI<- as.numeric(globalblast_4c$identity_perc_NCBI)
+#set the these 70 sequences comparison as zero.
+
+
+#invitro_without_top_repeat <- globalblast_4c[!globalblast_4c$identifier %in% invitro_top_repeat$identifier, ]
+#nrow = 262938
+
+
+
 

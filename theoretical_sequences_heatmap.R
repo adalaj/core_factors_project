@@ -15,7 +15,7 @@ library(pheatmap)
 # I separated each tables and saved them in separate csv files based on their table title
 # Task 1: To compare similarity within theoretical sequences 
 
-theoretical<- fread("S2_Rt_theoretical.csv", sep = ",", header = TRUE)
+theoretical<- fread("S2_Rt_invitro.csv", sep = ",", header = TRUE)
 
 
 #make a new data table that will have identifier and its sequence next to each other. 
@@ -44,7 +44,7 @@ reshaped_theoretical$theoretical_sequences <- toupper(reshaped_theoretical$theor
 anyDuplicated(reshaped_theoretical$filename)
 #0
 
-fwrite(reshaped_theoretical, "reshaped_S2_Rt_theoretical.csv")
+fwrite(reshaped_theoretical, "reshaped_S2_Rt_invitro.csv")
 
 sigma<- pwalign::nucleotideSubstitutionMatrix(match = 2, mismatch = -3, baseOnly = TRUE)
 attempt2<- data.frame((matrix(nrow = 0, ncol=10)))

@@ -640,7 +640,7 @@ fwrite(heatmap_order2_matrix_scores_histogram, "invitro_sequences_without_gaps_s
 #A histogram is plotted, showing how frequently different similarity scores occur.
 
   
-avg_score <- round(mean(heatmap_order2_matrix_scores),2)
+avg_score <- round(mean(heatmap_order2_matrix_scores),2) #or round(mean(scores_data$identity_perc_score, na.rm =TRUE),2)
 #[1] 36.3366
 #abline: Draws a vertical line at the mean of the similarity scores to highlight the central tendency
 #lwd is thickness
@@ -747,10 +747,43 @@ ggsave("invitro_sequences_percent_identity_score_histogram_without_top_repeat.ti
        plot= invitro_histo_toprepeat, height = 11, width = 12, dpi=600)
 
 
+##i want to add average percent of scores after removing top repeat 
+
+invitro_histo_new<- ggplot(scores_data, aes(x = heatmap_order2_matrix_scores)) +
+  geom_histogram(
+    binwidth = 5, 
+    fill = "skyblue",
+    color = "darkblue", 
+    boundary = 0 
+  ) +
+  geom_vline(aes(xintercept = mean(heatmap_order2_matrix_scores)), color = "red", linewidth = 2, linetype = "dashed")+
+  geom_vline(aes(xintercept = 35.51), color = "darkgreen", linewidth = 2, linetype = "dashed")+
+  labs (
+    title = "Invitro sequences (R7) Percent Identity Score", 
+    subtitle = paste("Average percent score: ", avg_score, sep= ""),
+    x = "Percent Identity Score",
+    y = "Frequency")+
+  
+  scale_x_continuous(
+    limits = c(0,100),
+    breaks = seq(0, 100, 10)
+  )+
+  scale_y_continuous(
+    limits = c(0,16800),
+    breaks = seq(0, 16800, 2500)
+  )+
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        text = element_text(size = 30),
+        axis.line = element_line(color = "black"),
+        legend.position = "top")
+
+ggsave("invitro_sequences_two_avg_percent_identity_scores_histogram.tiff", 
+       plot= invitro_histo_new, height = 11, width = 12, dpi=600)
 
 
 
-##wanted to see, if i can decrease mean byremoving sequences that are giving 100% similarity percent with each other
+##wanted to see, how many sequences are identical to each other excluding self comparions
 attempt2<- fread("invitro_sequences_global_blast_withoutgaps.csv", sep = ",", header = TRUE)
 invitro_top_repeat<- attempt2 %>% filter(identity_perc_NCBI == 100 & query != subject)
 #nrow= 3318
